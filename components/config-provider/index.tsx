@@ -1,30 +1,140 @@
 import * as React from 'react';
+import { createTheme, StyleContext as CssInJsStyleContext } from '@ant-design/cssinjs';
 import IconContext from '@ant-design/icons/lib/components/Context';
-import { FormProvider as RcFormProvider } from 'rc-field-form';
-import { ValidateMessages } from 'rc-field-form/lib/interface';
-import useMemo from 'rc-util/lib/hooks/useMemo';
-import { RenderEmptyHandler } from './renderEmpty';
-import LocaleProvider, { ANT_MARK, Locale } from '../locale-provider';
-import LocaleReceiver from '../locale-provider/LocaleReceiver';
+import { merge } from '@rc-component/util';
+import useMemo from '@rc-component/util/lib/hooks/useMemo';
+
+import warning, { devUseWarning, WarningContext } from '../_util/warning';
+import type { WarningContextProps } from '../_util/warning';
+import ValidateMessagesContext from '../form/validateMessagesContext';
+import type { Locale } from '../locale';
+import LocaleProvider, { ANT_MARK } from '../locale';
+import type { LocaleContextProps } from '../locale/context';
+import LocaleContext from '../locale/context';
+import defaultLocale from '../locale/en_US';
+import { defaultTheme, DesignTokenContext } from '../theme/context';
+import defaultSeedToken from '../theme/themes/seed';
+import UniqueProvider from '../tooltip/UniqueProvider';
+import type {
+  AlertConfig,
+  BadgeConfig,
+  BreadcrumbConfig,
+  ButtonConfig,
+  CardConfig,
+  CardMetaConfig,
+  CascaderConfig,
+  CheckboxConfig,
+  CollapseConfig,
+  ComponentStyleConfig,
+  ConfigConsumerProps,
+  CSPConfig,
+  DatePickerConfig,
+  DirectionType,
+  DrawerConfig,
+  EmptyConfig,
+  FlexConfig,
+  FloatButtonConfig,
+  FloatButtonGroupConfig,
+  FormConfig,
+  ImageConfig,
+  InputConfig,
+  InputNumberConfig,
+  InputSearchConfig,
+  ListConfig,
+  MasonryConfig,
+  MentionsConfig,
+  MenuConfig,
+  MessageConfig,
+  ModalConfig,
+  NotificationConfig,
+  OTPConfig,
+  PaginationConfig,
+  PopconfirmConfig,
+  PopoverConfig,
+  PopupOverflow,
+  QRcodeConfig,
+  RadioConfig,
+  RangePickerConfig,
+  RibbonConfig,
+  SelectConfig,
+  SkeletonConfig,
+  SpaceConfig,
+  SpinConfig,
+  TableConfig,
+  TabsConfig,
+  TagConfig,
+  TextAreaConfig,
+  ThemeConfig,
+  TimePickerConfig,
+  TooltipConfig,
+  TourConfig,
+  TransferConfig,
+  TreeSelectConfig,
+  UploadConfig,
+  Variant,
+  WaveConfig,
+} from './context';
 import {
   ConfigConsumer,
   ConfigContext,
-  CSPConfig,
-  DirectionType,
-  ConfigConsumerProps,
+  defaultIconPrefixCls,
+  defaultPrefixCls,
+  Variants,
 } from './context';
-import SizeContext, { SizeContextProvider, SizeType } from './SizeContext';
-import message from '../message';
-import notification from '../notification';
-import { RequiredMark } from '../form/Form';
+import type { RenderEmptyHandler } from './defaultRenderEmpty';
+import { DisabledContextProvider } from './DisabledContext';
+import useConfig from './hooks/useConfig';
+import useTheme from './hooks/useTheme';
+import MotionWrapper from './MotionWrapper';
+import PropWarning from './PropWarning';
+import type { SizeType } from './SizeContext';
+import SizeContext, { SizeContextProvider } from './SizeContext';
+import useStyle from './style';
+
+/**
+ * This component registers icon styles inside the DesignTokenContext.Provider
+ * so that CSS variables use the correct cssVar key from the theme config.
+ */
+const IconStyle: React.FC<{ iconPrefixCls: string; csp?: CSPConfig }> = ({
+  iconPrefixCls,
+  csp,
+}) => {
+  useStyle(iconPrefixCls, csp);
+  return null;
+};
+
+export type { Variant };
+
+export { Variants };
+
+/**
+ * Since too many feedback using static method like `Modal.confirm` not getting theme, we record the
+ * theme register info here to help developer get warning info.
+ */
+let existThemeConfig = false;
+
+export const warnContext: (componentName: string) => void =
+  process.env.NODE_ENV !== 'production'
+    ? (componentName: string) => {
+        warning(
+          !existThemeConfig,
+          componentName,
+          `Static function can not consume context like dynamic theme. Please use 'App' component instead.`,
+        );
+      }
+    : /* istanbul ignore next */
+      null!;
 
 export {
-  RenderEmptyHandler,
-  ConfigContext,
   ConfigConsumer,
-  CSPConfig,
-  DirectionType,
-  ConfigConsumerProps,
+  type ConfigConsumerProps,
+  ConfigContext,
+  type CSPConfig,
+  defaultIconPrefixCls,
+  defaultPrefixCls,
+  type DirectionType,
+  type RenderEmptyHandler,
+  type ThemeConfig,
 };
 
 export const configConsumerProps = [
@@ -36,46 +146,135 @@ export const configConsumerProps = [
   'csp',
   'autoInsertSpaceInButton',
   'locale',
-  'pageHeader',
 ];
 
 // These props is used by `useContext` directly in sub component
-const PASSED_PROPS: Exclude<keyof ConfigConsumerProps, 'rootPrefixCls' | 'getPrefixCls'>[] = [
+const PASSED_PROPS: Exclude<
+  keyof ConfigConsumerProps,
+  'rootPrefixCls' | 'getPrefixCls' | 'warning'
+>[] = [
   'getTargetContainer',
   'getPopupContainer',
   'renderEmpty',
-  'pageHeader',
   'input',
+  'pagination',
   'form',
+  'select',
+  'button',
 ];
 
 export interface ConfigProviderProps {
-  getTargetContainer?: () => HTMLElement;
-  getPopupContainer?: (triggerNode: HTMLElement) => HTMLElement;
+  getTargetContainer?: () => HTMLElement | Window | ShadowRoot;
+  getPopupContainer?: (triggerNode?: HTMLElement) => HTMLElement | ShadowRoot;
   prefixCls?: string;
   iconPrefixCls?: string;
   children?: React.ReactNode;
   renderEmpty?: RenderEmptyHandler;
   csp?: CSPConfig;
+  /** @deprecated Please use `{ button: { autoInsertSpace: boolean }}` instead */
   autoInsertSpaceInButton?: boolean;
-  form?: {
-    validateMessages?: ValidateMessages;
-    requiredMark?: RequiredMark;
-  };
-  input?: {
-    autoComplete?: string;
-  };
+  variant?: Variant;
+  form?: FormConfig;
+  input?: InputConfig;
+  inputSearch?: InputSearchConfig;
+  otp?: OTPConfig;
+  inputNumber?: InputNumberConfig;
+  textArea?: TextAreaConfig;
+  select?: SelectConfig;
+  pagination?: PaginationConfig;
+  /**
+   * @descCN 语言包配置，语言包可到 `antd/locale` 目录下寻找。
+   * @descEN Language package setting, you can find the packages in `antd/locale`.
+   */
   locale?: Locale;
-  pageHeader?: {
-    ghost: boolean;
-  };
   componentSize?: SizeType;
+  componentDisabled?: boolean;
+  /**
+   * @descCN 设置布局展示方向。
+   * @descEN Set direction of layout.
+   * @default ltr
+   */
   direction?: DirectionType;
-  space?: {
-    size?: SizeType | number;
-  };
+  space?: SpaceConfig;
+  splitter?: ComponentStyleConfig;
+  /**
+   * @descCN 设置 `false` 时关闭虚拟滚动。
+   * @descEN Close the virtual scrolling when setting `false`.
+   * @default true
+   */
   virtual?: boolean;
+  /** @deprecated Please use `popupMatchSelectWidth` instead */
   dropdownMatchSelectWidth?: boolean;
+  popupMatchSelectWidth?: boolean;
+  popupOverflow?: PopupOverflow;
+  theme?: ThemeConfig;
+  warning?: WarningContextProps;
+  alert?: AlertConfig;
+  affix?: ComponentStyleConfig;
+  anchor?: ComponentStyleConfig;
+  button?: ButtonConfig;
+  calendar?: ComponentStyleConfig;
+  carousel?: ComponentStyleConfig;
+  cascader?: CascaderConfig;
+  treeSelect?: TreeSelectConfig;
+  collapse?: CollapseConfig;
+  divider?: ComponentStyleConfig;
+  drawer?: DrawerConfig;
+  typography?: ComponentStyleConfig;
+  skeleton?: SkeletonConfig;
+  spin?: SpinConfig;
+  segmented?: ComponentStyleConfig;
+  statistic?: ComponentStyleConfig;
+  steps?: ComponentStyleConfig;
+  image?: ImageConfig;
+  layout?: ComponentStyleConfig;
+  list?: ListConfig;
+  mentions?: MentionsConfig;
+  modal?: ModalConfig;
+  progress?: ComponentStyleConfig;
+  result?: ComponentStyleConfig;
+  slider?: ComponentStyleConfig;
+  masonry?: MasonryConfig;
+  breadcrumb?: BreadcrumbConfig;
+  menu?: MenuConfig;
+  floatButton?: FloatButtonConfig;
+  floatButtonGroup?: FloatButtonGroupConfig;
+  checkbox?: CheckboxConfig;
+  descriptions?: ComponentStyleConfig;
+  empty?: EmptyConfig;
+  badge?: BadgeConfig;
+  radio?: RadioConfig;
+  rate?: ComponentStyleConfig;
+  ribbon?: RibbonConfig;
+  switch?: ComponentStyleConfig;
+  transfer?: TransferConfig;
+  avatar?: ComponentStyleConfig;
+  message?: MessageConfig;
+  tag?: TagConfig;
+  table?: TableConfig;
+  card?: CardConfig;
+  cardMeta?: CardMetaConfig;
+  tabs?: TabsConfig;
+  timeline?: ComponentStyleConfig;
+  timePicker?: TimePickerConfig;
+  upload?: UploadConfig;
+  notification?: NotificationConfig;
+  tree?: ComponentStyleConfig;
+  colorPicker?: ComponentStyleConfig;
+  datePicker?: DatePickerConfig;
+  rangePicker?: RangePickerConfig;
+  dropdown?: ComponentStyleConfig;
+  flex?: FlexConfig;
+  /**
+   * Wave is special component which only patch on the effect of component interaction.
+   */
+  wave?: WaveConfig;
+  tour?: TourConfig;
+  tooltip?: TooltipConfig;
+  popover?: PopoverConfig;
+  popconfirm?: PopconfirmConfig;
+  watermark?: ComponentStyleConfig;
+  qrcode?: QRcodeConfig;
 }
 
 interface ProviderChildrenProps extends ConfigProviderProps {
@@ -83,67 +282,165 @@ interface ProviderChildrenProps extends ConfigProviderProps {
   legacyLocale: Locale;
 }
 
-export const defaultPrefixCls = 'ant';
-let globalPrefixCls: string;
+type holderRenderType = (children: React.ReactNode) => React.ReactNode;
 
-const setGlobalConfig = (params: Pick<ConfigProviderProps, 'prefixCls'>) => {
-  if (params.prefixCls !== undefined) {
-    globalPrefixCls = params.prefixCls;
-  }
-};
+let globalPrefixCls: string;
+let globalIconPrefixCls: string;
+let globalTheme: ThemeConfig;
+let globalHolderRender: holderRenderType | undefined;
 
 function getGlobalPrefixCls() {
   return globalPrefixCls || defaultPrefixCls;
 }
 
+function getGlobalIconPrefixCls() {
+  return globalIconPrefixCls || defaultIconPrefixCls;
+}
+
+export interface GlobalConfigProps {
+  prefixCls?: string;
+  iconPrefixCls?: string;
+  theme?: ThemeConfig;
+  holderRender?: holderRenderType;
+}
+
+const setGlobalConfig = (props: GlobalConfigProps) => {
+  const { prefixCls, iconPrefixCls, theme, holderRender } = props;
+  if (prefixCls !== undefined) {
+    globalPrefixCls = prefixCls;
+  }
+  if (iconPrefixCls !== undefined) {
+    globalIconPrefixCls = iconPrefixCls;
+  }
+  if ('holderRender' in props) {
+    globalHolderRender = holderRender;
+  }
+
+  if (theme) {
+    globalTheme = theme;
+  }
+};
+
 export const globalConfig = () => ({
   getPrefixCls: (suffixCls?: string, customizePrefixCls?: string) => {
-    if (customizePrefixCls) return customizePrefixCls;
+    if (customizePrefixCls) {
+      return customizePrefixCls;
+    }
     return suffixCls ? `${getGlobalPrefixCls()}-${suffixCls}` : getGlobalPrefixCls();
   },
-  getRootPrefixCls: (rootPrefixCls?: string, customizePrefixCls?: string) => {
-    // Customize rootPrefixCls is first priority
-    if (rootPrefixCls) {
-      return rootPrefixCls;
-    }
-
+  getIconPrefixCls: getGlobalIconPrefixCls,
+  getRootPrefixCls: () => {
     // If Global prefixCls provided, use this
     if (globalPrefixCls) {
       return globalPrefixCls;
     }
 
-    // [Legacy] If customize prefixCls provided, we cut it to get the prefixCls
-    if (customizePrefixCls && customizePrefixCls.includes('-')) {
-      return customizePrefixCls.replace(/^(.*)-[^-]*$/, '$1');
-    }
-
     // Fallback to default prefixCls
     return getGlobalPrefixCls();
   },
+  getTheme: () => globalTheme,
+  holderRender: globalHolderRender,
 });
 
-const ProviderChildren: React.FC<ProviderChildrenProps> = props => {
+const ProviderChildren: React.FC<ProviderChildrenProps> = (props) => {
   const {
     children,
-    csp,
+    csp: customCsp,
     autoInsertSpaceInButton,
+    alert,
+    affix,
+    anchor,
     form,
     locale,
     componentSize,
     direction,
     space,
+    splitter,
     virtual,
     dropdownMatchSelectWidth,
+    popupMatchSelectWidth,
+    popupOverflow,
     legacyLocale,
     parentContext,
-    iconPrefixCls,
+    iconPrefixCls: customIconPrefixCls,
+    theme,
+    componentDisabled,
+    segmented,
+    statistic,
+    spin,
+    calendar,
+    carousel,
+    cascader,
+    collapse,
+    typography,
+    checkbox,
+    descriptions,
+    divider,
+    drawer,
+    skeleton,
+    steps,
+    image,
+    layout,
+    list,
+    mentions,
+    modal,
+    progress,
+    result,
+    slider,
+    breadcrumb,
+    masonry,
+    menu,
+    pagination,
+    input,
+    textArea,
+    otp,
+    empty,
+    badge,
+    radio,
+    rate,
+    ribbon,
+    switch: SWITCH,
+    transfer,
+    avatar,
+    message,
+    tag,
+    table,
+    card,
+    cardMeta,
+    tabs,
+    timeline,
+    timePicker,
+    upload,
+    notification,
+    tree,
+    colorPicker,
+    datePicker,
+    rangePicker,
+    flex,
+    wave,
+    dropdown,
+    warning: warningConfig,
+    tour,
+    tooltip,
+    popover,
+    popconfirm,
+    qrcode,
+    floatButton,
+    floatButtonGroup,
+    variant,
+    inputNumber,
+    treeSelect,
+    watermark,
   } = props;
 
+  // =================================== Context ===================================
   const getPrefixCls = React.useCallback(
     (suffixCls: string, customizePrefixCls?: string) => {
       const { prefixCls } = props;
 
-      if (customizePrefixCls) return customizePrefixCls;
+      if (customizePrefixCls) {
+        return customizePrefixCls;
+      }
 
       const mergedPrefixCls = prefixCls || parentContext.getPrefixCls('');
 
@@ -152,58 +449,181 @@ const ProviderChildren: React.FC<ProviderChildrenProps> = props => {
     [parentContext.getPrefixCls, props.prefixCls],
   );
 
-  const config = {
-    ...parentContext,
+  const iconPrefixCls = customIconPrefixCls || parentContext.iconPrefixCls || defaultIconPrefixCls;
+  const csp = customCsp || parentContext.csp;
+
+  const mergedTheme = useTheme(theme, parentContext.theme, { prefixCls: getPrefixCls('') });
+
+  if (process.env.NODE_ENV !== 'production') {
+    existThemeConfig = existThemeConfig || !!mergedTheme;
+  }
+
+  const baseConfig = {
     csp,
     autoInsertSpaceInButton,
+    alert,
+    affix,
+    anchor,
     locale: locale || legacyLocale,
     direction,
     space,
+    splitter,
     virtual,
-    dropdownMatchSelectWidth,
+    popupMatchSelectWidth: popupMatchSelectWidth ?? dropdownMatchSelectWidth,
+    popupOverflow,
     getPrefixCls,
+    iconPrefixCls,
+    theme: mergedTheme,
+    segmented,
+    statistic,
+    spin,
+    calendar,
+    carousel,
+    cascader,
+    collapse,
+    typography,
+    checkbox,
+    descriptions,
+    divider,
+    drawer,
+    skeleton,
+    steps,
+    image,
+    input,
+    textArea,
+    otp,
+    layout,
+    list,
+    mentions,
+    modal,
+    progress,
+    result,
+    slider,
+    breadcrumb,
+    masonry,
+    menu,
+    pagination,
+    empty,
+    badge,
+    radio,
+    rate,
+    ribbon,
+    switch: SWITCH,
+    transfer,
+    avatar,
+    message,
+    tag,
+    table,
+    card,
+    cardMeta,
+    tabs,
+    timeline,
+    timePicker,
+    upload,
+    notification,
+    tree,
+    colorPicker,
+    datePicker,
+    rangePicker,
+    flex,
+    wave,
+    dropdown,
+    warning: warningConfig,
+    tour,
+    tooltip,
+    popover,
+    popconfirm,
+    qrcode,
+    floatButton,
+    floatButtonGroup,
+    variant,
+    inputNumber,
+    treeSelect,
+    watermark,
   };
+
+  if (process.env.NODE_ENV !== 'production') {
+    const warningFn = devUseWarning('ConfigProvider');
+    warningFn(
+      !('autoInsertSpaceInButton' in props),
+      'deprecated',
+      '`autoInsertSpaceInButton` is deprecated. Please use `{ button: { autoInsertSpace: boolean }}` instead.',
+    );
+  }
+
+  const config: ConfigConsumerProps = {
+    ...parentContext,
+  };
+
+  (Object.keys(baseConfig) as (keyof typeof baseConfig)[]).forEach((key) => {
+    if (baseConfig[key] !== undefined) {
+      (config as any)[key] = baseConfig[key];
+    }
+  });
 
   // Pass the props used by `useContext` directly with child component.
   // These props should merged into `config`.
-  PASSED_PROPS.forEach(propName => {
-    const propValue: any = props[propName];
+  PASSED_PROPS.forEach((propName) => {
+    const propValue = props[propName];
     if (propValue) {
       (config as any)[propName] = propValue;
     }
   });
 
+  if (typeof autoInsertSpaceInButton !== 'undefined') {
+    // merge deprecated api
+    config.button = {
+      autoInsertSpace: autoInsertSpaceInButton,
+      ...config.button,
+    };
+  }
+
   // https://github.com/ant-design/ant-design/issues/27617
   const memoedConfig = useMemo(
     () => config,
     config,
-    (prevConfig: Record<string, any>, currentConfig) => {
-      const prevKeys = Object.keys(prevConfig);
-      const currentKeys = Object.keys(currentConfig);
+    (prevConfig, currentConfig) => {
+      const prevKeys = Object.keys(prevConfig) as Array<keyof typeof config>;
+      const currentKeys = Object.keys(currentConfig) as Array<keyof typeof config>;
       return (
         prevKeys.length !== currentKeys.length ||
-        prevKeys.some(key => prevConfig[key] !== currentConfig[key])
+        prevKeys.some((key) => prevConfig[key] !== currentConfig[key])
       );
     },
   );
 
-  const memoIconContextValue = React.useMemo(() => ({ prefixCls: iconPrefixCls, csp }), [
-    iconPrefixCls,
-  ]);
+  const { layer } = React.useContext(CssInJsStyleContext);
 
-  let childNode = children;
-  // Additional Form provider
-  let validateMessages: ValidateMessages = {};
+  const memoIconContextValue = React.useMemo(
+    () => ({ prefixCls: iconPrefixCls, csp, layer: layer ? 'antd' : undefined }),
+    [iconPrefixCls, csp, layer],
+  );
 
-  if (locale && locale.Form && locale.Form.defaultValidateMessages) {
-    validateMessages = locale.Form.defaultValidateMessages;
-  }
-  if (form && form.validateMessages) {
-    validateMessages = { ...validateMessages, ...form.validateMessages };
-  }
+  let childNode = (
+    <>
+      <IconStyle iconPrefixCls={iconPrefixCls} csp={csp} />
+      <PropWarning dropdownMatchSelectWidth={dropdownMatchSelectWidth} />
+      {children}
+    </>
+  );
+
+  const validateMessages = React.useMemo(
+    () =>
+      merge(
+        defaultLocale.Form?.defaultValidateMessages || {},
+        memoedConfig.locale?.Form?.defaultValidateMessages || {},
+        memoedConfig.form?.validateMessages || {},
+        form?.validateMessages || {},
+      ),
+    [memoedConfig, form?.validateMessages],
+  );
 
   if (Object.keys(validateMessages).length > 0) {
-    childNode = <RcFormProvider validateMessages={validateMessages}>{children}</RcFormProvider>;
+    childNode = (
+      <ValidateMessagesContext.Provider value={validateMessages}>
+        {childNode}
+      </ValidateMessagesContext.Provider>
+    );
   }
 
   if (locale) {
@@ -214,7 +634,7 @@ const ProviderChildren: React.FC<ProviderChildrenProps> = props => {
     );
   }
 
-  if (iconPrefixCls) {
+  if (iconPrefixCls || csp) {
     childNode = (
       <IconContext.Provider value={memoIconContextValue}>{childNode}</IconContext.Provider>
     );
@@ -224,45 +644,114 @@ const ProviderChildren: React.FC<ProviderChildrenProps> = props => {
     childNode = <SizeContextProvider size={componentSize}>{childNode}</SizeContextProvider>;
   }
 
+  // =================================== Motion ===================================
+  childNode = <MotionWrapper>{childNode}</MotionWrapper>;
+
+  // ================================ Tooltip Unique ===============================
+  if (tooltip?.unique) {
+    childNode = <UniqueProvider>{childNode}</UniqueProvider>;
+  }
+
+  // ================================ Dynamic theme ================================
+  const memoTheme = React.useMemo(() => {
+    const { algorithm, token, components, cssVar, ...rest } = mergedTheme || {};
+    const themeObj =
+      algorithm && (!Array.isArray(algorithm) || algorithm.length > 0)
+        ? createTheme(algorithm)
+        : defaultTheme;
+
+    const parsedComponents: any = {};
+    Object.entries(components || {}).forEach(([componentName, componentToken]) => {
+      const parsedToken: typeof componentToken & { theme?: typeof defaultTheme } = {
+        ...componentToken,
+      };
+      if ('algorithm' in parsedToken) {
+        if (parsedToken.algorithm === true) {
+          parsedToken.theme = themeObj;
+        } else if (
+          Array.isArray(parsedToken.algorithm) ||
+          typeof parsedToken.algorithm === 'function'
+        ) {
+          parsedToken.theme = createTheme(parsedToken.algorithm);
+        }
+        delete parsedToken.algorithm;
+      }
+      parsedComponents[componentName] = parsedToken;
+    });
+
+    const mergedToken = {
+      ...defaultSeedToken,
+      ...token,
+    };
+
+    return {
+      ...rest,
+      theme: themeObj,
+
+      token: mergedToken,
+      components: parsedComponents,
+      override: {
+        override: mergedToken,
+        ...parsedComponents,
+      },
+      cssVar,
+    };
+  }, [mergedTheme]);
+
+  if (theme) {
+    childNode = (
+      <DesignTokenContext.Provider value={memoTheme}>{childNode}</DesignTokenContext.Provider>
+    );
+  }
+
+  // ================================== Warning ===================================
+  if (memoedConfig.warning) {
+    childNode = (
+      <WarningContext.Provider value={memoedConfig.warning}>{childNode}</WarningContext.Provider>
+    );
+  }
+
+  // =================================== Render ===================================
+  if (componentDisabled !== undefined) {
+    childNode = (
+      <DisabledContextProvider disabled={componentDisabled}>{childNode}</DisabledContextProvider>
+    );
+  }
+
   return <ConfigContext.Provider value={memoedConfig}>{childNode}</ConfigContext.Provider>;
 };
 
 const ConfigProvider: React.FC<ConfigProviderProps> & {
+  /** @private internal Usage. do not use in your production */
   ConfigContext: typeof ConfigContext;
+  /** @deprecated Please use `ConfigProvider.useConfig().componentSize` instead */
   SizeContext: typeof SizeContext;
   config: typeof setGlobalConfig;
-} = props => {
-  React.useEffect(() => {
-    if (props.direction) {
-      message.config({
-        rtl: props.direction === 'rtl',
-      });
-      notification.config({
-        rtl: props.direction === 'rtl',
-      });
-    }
-  }, [props.direction]);
-
-  return (
-    <LocaleReceiver>
-      {(_, __, legacyLocale) => (
-        <ConfigConsumer>
-          {context => (
-            <ProviderChildren
-              parentContext={context}
-              legacyLocale={legacyLocale as Locale}
-              {...props}
-            />
-          )}
-        </ConfigConsumer>
-      )}
-    </LocaleReceiver>
-  );
+  useConfig: typeof useConfig;
+} = (props) => {
+  const context = React.useContext<ConfigConsumerProps>(ConfigContext);
+  const antLocale = React.useContext<LocaleContextProps | undefined>(LocaleContext);
+  return <ProviderChildren parentContext={context} legacyLocale={antLocale!} {...props} />;
 };
 
-/** @private internal Usage. do not use in your production */
 ConfigProvider.ConfigContext = ConfigContext;
 ConfigProvider.SizeContext = SizeContext;
 ConfigProvider.config = setGlobalConfig;
+ConfigProvider.useConfig = useConfig;
+
+Object.defineProperty(ConfigProvider, 'SizeContext', {
+  get: () => {
+    warning(
+      false,
+      'ConfigProvider',
+      'ConfigProvider.SizeContext is deprecated. Please use `ConfigProvider.useConfig().componentSize` instead.',
+    );
+    return SizeContext;
+  },
+});
+
+if (process.env.NODE_ENV !== 'production') {
+  ConfigProvider.displayName = 'ConfigProvider';
+}
 
 export default ConfigProvider;

@@ -1,9 +1,11 @@
-import * as React from 'react';
-import classNames from 'classnames';
+import React from 'react';
+import { clsx } from 'clsx';
 
-function notEmpty(val: any) {
-  return val !== undefined && val !== null;
-}
+import type { DescriptionsClassNamesType, DescriptionsStylesType } from '.';
+import { useMergeSemantic } from '../_util/hooks';
+import isNonNullable from '../_util/isNonNullable';
+import DescriptionsContext from './DescriptionsContext';
+import type { CellSemanticClassNames, CellSemanticStyles } from './DescriptionsContext';
 
 export interface CellProps {
   itemPrefixCls: string;
@@ -11,67 +13,88 @@ export interface CellProps {
   className?: string;
   component: string;
   style?: React.CSSProperties;
+  /** @deprecated Please use `styles.label` instead */
   labelStyle?: React.CSSProperties;
+  /** @deprecated Please use `styles.content` instead */
   contentStyle?: React.CSSProperties;
+  classNames?: CellSemanticClassNames;
+  styles?: CellSemanticStyles;
   bordered?: boolean;
   label?: React.ReactNode;
   content?: React.ReactNode;
   colon?: boolean;
+  type?: 'label' | 'content' | 'item';
 }
 
-const Cell: React.FC<CellProps> = ({
-  itemPrefixCls,
-  component,
-  span,
-  className,
-  style,
-  labelStyle,
-  contentStyle,
-  bordered,
-  label,
-  content,
-  colon,
-}) => {
-  const Component = component as any;
+const Cell: React.FC<CellProps> = (props) => {
+  const {
+    itemPrefixCls,
+    component,
+    span,
+    className,
+    style,
+    labelStyle,
+    contentStyle,
+    bordered,
+    label,
+    content,
+    colon,
+    type,
+    styles,
+    classNames,
+  } = props;
+
+  const Component = component as keyof React.JSX.IntrinsicElements;
+
+  const { classNames: contextClassNames, styles: contextStyles } =
+    React.useContext(DescriptionsContext);
+
+  const [mergedClassNames, mergedStyles] = useMergeSemantic<
+    DescriptionsClassNamesType,
+    DescriptionsStylesType,
+    CellProps
+  >([contextClassNames, classNames], [contextStyles, styles], {
+    props,
+  });
+
+  const mergedLabelStyle: React.CSSProperties = { ...labelStyle, ...mergedStyles.label };
+  const mergedContentStyle: React.CSSProperties = { ...contentStyle, ...mergedStyles.content };
 
   if (bordered) {
     return (
       <Component
-        className={classNames(
-          {
-            [`${itemPrefixCls}-item-label`]: notEmpty(label),
-            [`${itemPrefixCls}-item-content`]: notEmpty(content),
-          },
-          className,
-        )}
-        style={style}
         colSpan={span}
+        style={style}
+        className={clsx(className, {
+          [`${itemPrefixCls}-item-${type}`]: type === 'label' || type === 'content',
+          [mergedClassNames.label!]: mergedClassNames.label && type === 'label',
+          [mergedClassNames.content!]: mergedClassNames.content && type === 'content',
+        })}
       >
-        {notEmpty(label) && <span style={labelStyle}>{label}</span>}
-        {notEmpty(content) && <span style={contentStyle}>{content}</span>}
+        {isNonNullable(label) && <span style={mergedLabelStyle}>{label}</span>}
+        {isNonNullable(content) && <span style={mergedContentStyle}>{content}</span>}
       </Component>
     );
   }
 
   return (
-    <Component
-      className={classNames(`${itemPrefixCls}-item`, className)}
-      style={style}
-      colSpan={span}
-    >
+    <Component className={clsx(`${itemPrefixCls}-item`, className)} style={style} colSpan={span}>
       <div className={`${itemPrefixCls}-item-container`}>
-        {label && (
+        {isNonNullable(label) && (
           <span
-            className={classNames(`${itemPrefixCls}-item-label`, {
+            style={mergedLabelStyle}
+            className={clsx(`${itemPrefixCls}-item-label`, mergedClassNames.label, {
               [`${itemPrefixCls}-item-no-colon`]: !colon,
             })}
-            style={labelStyle}
           >
             {label}
           </span>
         )}
-        {content && (
-          <span className={classNames(`${itemPrefixCls}-item-content`)} style={contentStyle}>
+        {isNonNullable(content) && (
+          <span
+            style={mergedContentStyle}
+            className={clsx(`${itemPrefixCls}-item-content`, mergedClassNames.content)}
+          >
             {content}
           </span>
         )}

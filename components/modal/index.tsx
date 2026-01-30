@@ -1,25 +1,43 @@
-import OriginModal, { ModalFuncProps, destroyFns } from './Modal';
+import type { ModalStaticFunctions } from './confirm';
 import confirm, {
-  withWarn,
+  modalGlobalConfig,
+  withConfirm,
+  withError,
   withInfo,
   withSuccess,
-  withError,
-  withConfirm,
-  ModalStaticFunctions,
-  modalGlobalConfig,
+  withWarn,
 } from './confirm';
+import destroyFns from './destroyFns';
+import type { ModalFuncProps } from './interface';
+import OriginModal from './Modal';
+import PurePanel from './PurePanel';
+import useModal from './useModal';
 
-export { ActionButtonProps } from './ActionButton';
-export { ModalProps, ModalFuncProps } from './Modal';
+export type {
+  ModalFuncProps,
+  ModalLocale,
+  ModalProps,
+  ModalSemanticClassNames,
+  ModalSemanticName,
+  ModalSemanticStyles,
+} from './interface';
 
 function modalWarn(props: ModalFuncProps) {
   return confirm(withWarn(props));
 }
 
 type ModalType = typeof OriginModal &
-  ModalStaticFunctions & { destroyAll: () => void; config: typeof modalGlobalConfig };
+  ModalStaticFunctions & {
+    useModal: typeof useModal;
+    destroyAll: () => void;
+    config: typeof modalGlobalConfig;
+    /** @private Internal Component. Do not use in your production. */
+    _InternalPanelDoNotUseOrYouWillBeFired: typeof PurePanel;
+  };
 
 const Modal = OriginModal as ModalType;
+
+Modal.useModal = useModal;
 
 Modal.info = function infoFn(props: ModalFuncProps) {
   return confirm(withInfo(props));
@@ -51,5 +69,11 @@ Modal.destroyAll = function destroyAllFn() {
 };
 
 Modal.config = modalGlobalConfig;
+
+Modal._InternalPanelDoNotUseOrYouWillBeFired = PurePanel;
+
+if (process.env.NODE_ENV !== 'production') {
+  Modal.displayName = 'Modal';
+}
 
 export default Modal;

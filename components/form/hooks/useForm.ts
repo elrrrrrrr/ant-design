@@ -1,12 +1,16 @@
 import * as React from 'react';
-import { useForm as useRcForm, FormInstance as RcFormInstance } from 'rc-field-form';
+import type { FormInstance as RcFormInstance } from '@rc-component/form';
+import { useForm as useRcForm } from '@rc-component/form';
+import { getDOM } from '@rc-component/util/lib/Dom/findDOMNode';
 import scrollIntoView from 'scroll-into-view-if-needed';
-import { ScrollOptions, NamePath, InternalNamePath } from '../interface';
-import { toArray, getFieldId } from '../util';
+
+import type { InternalNamePath, NamePath, ScrollOptions } from '../interface';
+import { getFieldId, toArray } from '../util';
 
 export interface FormInstance<Values = any> extends RcFormInstance<Values> {
   scrollToField: (name: NamePath, options?: ScrollOptions) => void;
-  /** This is an internal usage. Do not use in your prod */
+  focusField: (name: NamePath) => void;
+  /** @internal: This is an internal usage. Do not use in your prod */
   __INTERNAL__: {
     /** No! Do not use this in your code! */
     name?: string;
@@ -16,9 +20,23 @@ export interface FormInstance<Values = any> extends RcFormInstance<Values> {
   getFieldInstance: (name: NamePath) => any;
 }
 
-function toNamePathStr(name: NamePath) {
+export function toNamePathStr(name: NamePath) {
   const namePath = toArray(name);
   return namePath.join('_');
+}
+
+function getFieldDOMNode(name: NamePath, wrapForm: FormInstance) {
+  const field = wrapForm.getFieldInstance(name);
+  const fieldDom = getDOM(field);
+
+  if (fieldDom) {
+    return fieldDom;
+  }
+
+  const fieldId = getFieldId(toArray(name), wrapForm.__INTERNAL__.name);
+  if (fieldId) {
+    return document.getElementById(fieldId);
+  }
 }
 
 export default function useForm<Values = any>(form?: FormInstance<Values>): [FormInstance<Values>] {
@@ -27,7 +45,7 @@ export default function useForm<Values = any>(form?: FormInstance<Values>): [For
 
   const wrapForm: FormInstance<Values> = React.useMemo(
     () =>
-      form || {
+      form ?? {
         ...rcForm,
         __INTERNAL__: {
           itemRef: (name: InternalNamePath) => (node: React.ReactElement) => {
@@ -39,20 +57,33 @@ export default function useForm<Values = any>(form?: FormInstance<Values>): [For
             }
           },
         },
-        scrollToField: (name: string, options: ScrollOptions = {}) => {
-          const namePath = toArray(name);
-          const fieldId = getFieldId(namePath, wrapForm.__INTERNAL__.name);
-          const node: HTMLElement | null = fieldId ? document.getElementById(fieldId) : null;
+        scrollToField: (name: NamePath, options: ScrollOptions = {}) => {
+          const { focus, ...restOpt } = options;
+          const node = getFieldDOMNode(name, wrapForm);
 
           if (node) {
             scrollIntoView(node, {
               scrollMode: 'if-needed',
               block: 'nearest',
-              ...options,
-            });
+              ...restOpt,
+            } as any);
+
+            // Focus if scroll success
+            if (focus) {
+              wrapForm.focusField(name);
+            }
           }
         },
-        getFieldInstance: (name: string) => {
+        focusField: (name: NamePath) => {
+          const itemRef = wrapForm.getFieldInstance(name);
+
+          if (typeof itemRef?.focus === 'function') {
+            itemRef.focus();
+          } else {
+            getFieldDOMNode(name, wrapForm)?.focus?.();
+          }
+        },
+        getFieldInstance: (name: NamePath) => {
           const namePathStr = toNamePathStr(name);
           return itemsRef.current[namePathStr];
         },

@@ -1,6 +1,13 @@
 import Collapse from './Collapse';
 
-export { CollapseProps } from './Collapse';
-export { CollapsePanelProps } from './CollapsePanel';
+export type {
+  CollapseClassNamesType,
+  CollapseProps,
+  CollapseSemanticClassNames,
+  CollapseSemanticName,
+  CollapseSemanticStyles,
+  CollapseStylesType,
+} from './Collapse';
+export type { CollapsePanelProps } from './CollapsePanel';
 
 export default Collapse;

@@ -1,15 +1,19 @@
 import * as React from 'react';
-import classNames from 'classnames';
-import KeyCode from 'rc-util/lib/KeyCode';
 import EnterOutlined from '@ant-design/icons/EnterOutlined';
-import { AutoSizeType } from 'rc-textarea/lib/ResizableTextArea';
+import type { TextAreaProps } from '@rc-component/textarea';
+import KeyCode from '@rc-component/util/lib/KeyCode';
+import { clsx } from 'clsx';
+
+import { cloneElement } from '../_util/reactNode';
+import type { DirectionType } from '../config-provider';
+import type { TextAreaRef } from '../input/TextArea';
 import TextArea from '../input/TextArea';
-import { DirectionType } from '../config-provider';
+import useStyle from './style';
 
 interface EditableProps {
-  prefixCls?: string;
+  prefixCls: string;
   value: string;
-  ['aria-label']?: string;
+  'aria-label'?: string;
   onSave: (value: string) => void;
   onCancel: () => void;
   onEnd?: () => void;
@@ -17,26 +21,31 @@ interface EditableProps {
   style?: React.CSSProperties;
   direction?: DirectionType;
   maxLength?: number;
-  autoSize?: boolean | AutoSizeType;
+  autoSize?: TextAreaProps['autoSize'];
+  enterIcon?: React.ReactNode;
+  component?: string;
 }
 
-const Editable: React.FC<EditableProps> = ({
-  prefixCls,
-  'aria-label': ariaLabel,
-  className,
-  style,
-  direction,
-  maxLength,
-  autoSize = true,
-  value,
-  onSave,
-  onCancel,
-  onEnd,
-}) => {
-  const ref = React.useRef<any>();
+const Editable: React.FC<EditableProps> = (props) => {
+  const {
+    prefixCls,
+    'aria-label': ariaLabel,
+    className,
+    style,
+    direction,
+    maxLength,
+    autoSize = true,
+    value,
+    onSave,
+    onCancel,
+    onEnd,
+    component,
+    enterIcon = <EnterOutlined />,
+  } = props;
+  const ref = React.useRef<TextAreaRef>(null);
 
   const inComposition = React.useRef(false);
-  const lastKeyCode = React.useRef<number>();
+  const lastKeyCode = React.useRef<number>(null);
 
   const [current, setCurrent] = React.useState(value);
 
@@ -45,7 +54,7 @@ const Editable: React.FC<EditableProps> = ({
   }, [value]);
 
   React.useEffect(() => {
-    if (ref.current && ref.current.resizableTextArea) {
+    if (ref.current?.resizableTextArea) {
       const { textArea } = ref.current.resizableTextArea;
       textArea.focus();
       const { length } = textArea.value;
@@ -67,8 +76,9 @@ const Editable: React.FC<EditableProps> = ({
 
   const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = ({ keyCode }) => {
     // We don't record keyCode when IME is using
-    if (inComposition.current) return;
-
+    if (inComposition.current) {
+      return;
+    }
     lastKeyCode.current = keyCode;
   };
 
@@ -85,19 +95,20 @@ const Editable: React.FC<EditableProps> = ({
   }) => {
     // Check if it's a real key
     if (
-      lastKeyCode.current === keyCode &&
-      !inComposition.current &&
-      !ctrlKey &&
-      !altKey &&
-      !metaKey &&
-      !shiftKey
+      lastKeyCode.current !== keyCode ||
+      inComposition.current ||
+      ctrlKey ||
+      altKey ||
+      metaKey ||
+      shiftKey
     ) {
-      if (keyCode === KeyCode.ENTER) {
-        confirmChange();
-        onEnd?.();
-      } else if (keyCode === KeyCode.ESC) {
-        onCancel();
-      }
+      return;
+    }
+    if (keyCode === KeyCode.ENTER) {
+      confirmChange();
+      onEnd?.();
+    } else if (keyCode === KeyCode.ESC) {
+      onCancel();
     }
   };
 
@@ -105,19 +116,24 @@ const Editable: React.FC<EditableProps> = ({
     confirmChange();
   };
 
-  const textAreaClassName = classNames(
+  const [hashId, cssVarCls] = useStyle(prefixCls);
+
+  const textAreaClassName = clsx(
     prefixCls,
     `${prefixCls}-edit-content`,
     {
       [`${prefixCls}-rtl`]: direction === 'rtl',
+      [`${prefixCls}-${component}`]: !!component,
     },
     className,
+    hashId,
+    cssVarCls,
   );
 
   return (
     <div className={textAreaClassName} style={style}>
       <TextArea
-        ref={ref as any}
+        ref={ref}
         maxLength={maxLength}
         value={current}
         onChange={onChange}
@@ -127,9 +143,12 @@ const Editable: React.FC<EditableProps> = ({
         onCompositionEnd={onCompositionEnd}
         onBlur={onBlur}
         aria-label={ariaLabel}
+        rows={1}
         autoSize={autoSize}
       />
-      <EnterOutlined className={`${prefixCls}-edit-content-confirm`} />
+      {enterIcon !== null
+        ? cloneElement(enterIcon, { className: `${prefixCls}-edit-content-confirm` })
+        : null}
     </div>
   );
 };
